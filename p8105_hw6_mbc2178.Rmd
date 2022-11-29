@@ -5,7 +5,75 @@ date: "11/23/2022"
 output: github_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(dplyr)
+library(stringr)
+
+set.seed(1)
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	warning = FALSE,
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
 ```
 
+### Problem 1 
+
+
+
+### Problem 2 
+
+Let's examine the Washington Post's data on homicides in 50 large U.S. cities. 
+We will refer to this raw dataset as `homicide_df`.
+
+```{r}
+homicide_df =
+  read_csv('data/homicide-data.csv', col_names = TRUE) 
+```
+
+The `homicide_df` contains data from 50 large cities in the U.S. with `r ncol(homicide_df)`
+fields or variables and `r nrow(homicide_df)` records or observations. This dataset includes
+first and last names as well as ethnicity of homicide victims (`victim_last`,`victim_first`,
+`victim_race`), dates of homicide report (`reported_date`) and the status of cases characterized
+as closed with arrest or closed without arrest (`disposition`). In addition, the 
+dataset also contains the longitude (`lon`) and latitude (`lat`) of the cities 
+where the homicide occurred. 
+
+Let's perform some data cleaning and manipulation on `homicide_df` using the 
+`janitor::clean_names()` and `mutate`. We ensured that `victim_age` is a numeric 
+variable by using an `if_else` statement that would apply NA to all missing values.
+
+New variables `city_state` and a binary variable `homicide_solved` with 0 and 1 to 
+indicate whether the homicide is solved were created. In addition, we limit our 
+analysis for those whose `victim_race` is white or black and exclude the following 
+cities Dallas,TX,Phoenix, AZ, and Kansas City, MO because these don’t report victim 
+race. Also, we omit Tulsa,AL because it is a data entry mistake.
+
+```{r}
+homicide_df =
+  homicide_df %>% 
+  janitor::clean_names() %>% 
+  mutate(
+    city_state = str_c(city,',',state),
+    homicide_solved = if_else(disposition %in% c("Closed by arrest"), 1, 0),
+    victim_age = ifelse(victim_age > 0, as.numeric(victim_age), NA)) %>% 
+    
+    filter(!city_state %in% c("Dallas,TX", "Phoenix, AZ", "Kansas City, MO","Tulsa,AL"),
+           victim_race %in% c("White", "Black")) 
+  
+    
+```
+
+Let's now fit a logistic regression with resolved vs unresolved as the outcome and
+victim age, sex and race as predictors for the city of Baltimore, MD. 
