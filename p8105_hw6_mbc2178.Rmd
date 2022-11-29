@@ -77,3 +77,50 @@ homicide_df =
 
 Let's now fit a logistic regression with resolved vs unresolved as the outcome and
 victim age, sex and race as predictors for the city of Baltimore, MD. 
+
+```{r}
+baltimore_df = 
+  homicide_df %>% 
+  filter(city_state == "Baltimore,MD") %>% 
+  select(victim_sex, victim_age, victim_race, homicide_solved, city_state) %>% 
+  arrange(desc(homicide_solved))
+  
+```
+Let's run the logistic regression in this step
+```{r}
+   
+logfit_baltimore = 
+  baltimore_df %>% 
+  glm(homicide_solved ~ victim_age + victim_race + victim_sex, data = ., family = binomial()) 
+```
+
+Let's perform manipulations to obtain adjusted odds ratio estimates with 95% CI for 
+solving homicides comparing male victims to female victims keeping all other variables fixed.
+
+
+```{r}
+logfit_baltimore %>% 
+   broom::tidy() %>% 
+  ## Exponentiate betas to obtain odds ratio & 95% CI
+  mutate(
+    log_OR = round(exp(estimate),3),
+    CL_UpperLimit = round(exp(estimate + 1.96*std.error),3),
+    CL_LowerLimit = round(exp(estimate - 1.96*std.error),3),
+    term = str_replace(term, "^victim_sexMale", "Victim Sex: Male")) %>% 
+  
+     select(term, log_OR,CL_LowerLimit, CL_UpperLimit) %>% 
+  
+    filter(term == "Victim Sex: Male") %>% 
+  rename('95%CI Upper Limit'= CL_UpperLimit ,
+         '95%CI Lower Limit' = CL_LowerLimit,
+         'Estimate' = log_OR,
+          'Covariate' = term) %>% 
+    knitr::kable(caption = "Table 1. Adjusted Odds Ratio for solving homicides", align = "lccrr")
+
+#### USE CONFINT to check if 95% CI calculations is correct 
+```
+
+We'll create a function to run a logistic regression and we'll map across cities to fit 
+our models for each city. 
+
+
