@@ -187,21 +187,30 @@ model_plot =
                 position = position_dodge(0.05)) +
   
   ## Style format
-  labs(title = "Adjusted Odds Ratio of unsolved homicides comparing males to females across U.S. Cities") +
+labs(title = 
+  "Adjusted Odds Ratio of unsolved homicides comparing males to females across U.S. 
+              Cities (Adjusted for victim's age, race, and sex)") +
   xlab("Cities") +
   ylab("Adjusted Odds Ratios") +
   theme(axis.text.x = element_text(angle = 60, hjust = 1)) 
 
 model_plot
-#Interactive plot
-#ggplotly(cities_plot)
+
 ```
 
 
 ### Problem 3 
 
+In this problem, we will analyze data gathered to understand the effects of several
+variables on a child's birthweight. 
+Let's load in our dataset and call it `birthwt_df`.
 
-We'll create a function to run a logistic regression and we'll map across cities to fit 
-our models for each city. 
+```{r}
+
+birthwt_df = 
+  read_csv(".data/birthweight.csv")
+```
+
+
 
 
