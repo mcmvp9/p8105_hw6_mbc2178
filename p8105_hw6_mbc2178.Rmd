@@ -92,6 +92,7 @@ Let's run the logistic regression in this step
 logfit_baltimore = 
   baltimore_df %>% 
   glm(homicide_solved ~ victim_age + victim_race + victim_sex, data = ., family = binomial()) 
+
 ```
 
 Let's perform manipulations to obtain adjusted odds ratio estimates with 95% CI for 
@@ -115,10 +116,90 @@ logfit_baltimore %>%
          '95%CI Lower Limit' = CL_LowerLimit,
          'Estimate' = log_OR,
           'Covariate' = term) %>% 
-    knitr::kable(caption = "Table 1. Adjusted Odds Ratio for solving homicides", align = "lccrr")
+    knitr::kable(caption = "Table 1. Adjusted Odds Ratio for solving homicides <br>
+                            (Adjusted for victim's age, race, and sex)", 
+                            align = "cccc")
 
 #### USE CONFINT to check if 95% CI calculations is correct 
 ```
+
+Let's run a regression model for each of the cities in our `homicide_df` dataset
+and extract the adjusted odds ratio (and CI) for solving homicides comparing male 
+victims to female victims. We adjusted for victim's age, race, and sex.
+We use `purrr:map` and `nest` to create a dataframe 
+and apply the `glm` function to obtain estimated ORs and CIs for each city.
+
+```{r}
+cities_reg = 
+  homicide_df %>% 
+    nest(data = -city_state) %>% 
+  mutate(
+    models = map(data, ~glm(homicide_solved ~ victim_age + victim_race + victim_sex, data = .x, 
+                            family = binomial())),
+    results = map(models, broom::tidy)
+  ) %>% 
+     select(-data,-models) %>% 
+       unnest(results) 
+```
+
+```{r}
+cities_fit = 
+  cities_reg %>% 
+## Exponentiate betas to obtain odds ratio & 95% CI
+  mutate(
+    log_OR = round(exp(estimate),3),
+    CL_UpperLimit = round(exp(estimate + 1.96*std.error),3),
+    CL_LowerLimit = round(exp(estimate - 1.96*std.error),3),
+    term = str_replace(term, "^victim_sexMale", "Victim Sex: Male")) %>% 
+  
+     select(city_state, term, log_OR,CL_LowerLimit, CL_UpperLimit) %>% 
+  
+    filter(term == "Victim Sex: Male") %>% 
+    arrange(city_state) 
+
+
+cities_fit %>% 
+rename( 'Cities' = city_state, 
+        '95%CI UpperLimit'= CL_UpperLimit ,
+        '95%CI LowerLimit' = CL_LowerLimit,
+         'Estimate' = log_OR,
+         'Covariate' = term) %>% 
+  
+   knitr::kable(caption = "Table 2. Adjusted Odds Ratio for solving homicides in 50 cities <br>
+                            (Adjusted for victim's age, race, and sex)", 
+                align = "ccccc")
+```
+
+Below we create a plot that shows the estimated ORs and CIs for each city. The 
+graph is organized by cities according to the estimated OR. 
+
+```{r}
+model_plot = 
+  cities_fit %>% 
+  arrange(log_OR) %>% 
+  mutate(city_state = fct_reorder(city_state, log_OR)) %>% 
+  
+  ggplot(aes(x=city_state, y= log_OR)) + 
+  geom_point() +
+  
+  ## Confidence Intervals 
+  geom_errorbar(aes(ymin =CL_LowerLimit, ymax= CL_UpperLimit), width =.2, 
+                position = position_dodge(0.05)) +
+  
+  ## Style format
+  labs(title = "Adjusted Odds Ratio of unsolved homicides comparing males to females across U.S. Cities") +
+  xlab("Cities") +
+  ylab("Adjusted Odds Ratios") +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) 
+
+model_plot
+#Interactive plot
+#ggplotly(cities_plot)
+```
+
+
+### Problem 3 
+
 
 We'll create a function to run a logistic regression and we'll map across cities to fit 
 our models for each city. 
