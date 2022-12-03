@@ -9,6 +9,9 @@ output: github_document
 library(tidyverse)
 library(dplyr)
 library(stringr)
+library(modelr)
+library(mgcv)
+library(corrplot)
 
 set.seed(1)
 
@@ -197,19 +200,145 @@ labs(title =
 model_plot
 
 ```
-
+Comment on the graph!!!!!!
 
 ### Problem 3 
 
 In this problem, we will analyze data gathered to understand the effects of several
-variables on a child's birthweight. 
-Let's load in our dataset and call it `birthwt_df`.
+variables on a child's birthweight. Let's load in our dataset and call it 
+`birthwt_df`.
 
 ```{r}
 
 birthwt_df = 
-  read_csv(".data/birthweight.csv")
+  read_csv("data/birthweight.csv") %>% 
+  janitor::clean_names() %>% 
+  
+  ## convert numeric variables to factor 
+  mutate(
+    babysex = as.factor(babysex),
+    mrace = as.factor(mrace),
+    frace = as.factor(frace),
+    malform = as.factor(malform)
+  ) %>% 
+  arrange()
+  
 ```
+For this problem, we will fit a model to examine the relationship between a child's
+birthweight (`bwt`) and different factors. But in order to see what's correlated with 
+our outcome and what factors we could examine in our model, let's create a 
+correlation matrix. We removed all the categorical variables to produce our 
+correlation matrix.
+
+```{r}
+ explo_df=
+birthwt_df %>% 
+  select(-babysex, -frace, -mrace, -malform)
+
+corr_df= cor(explo_df)
+
+corrplot(corr_df, method = "square")
+
+```
+
+From the correlation matrix, we observe a strong positive correlation between 
+baby's birthweight measured in grams (`bwt`) , baby’s length at birth measured 
+in centimeters(`blength`) and baby’s head circumference at birth measured in 
+centimeters (`bhead`). In addition , there's also a fair positive correlation 
+with gestational age in weeks (`gaweeks), mother's weight gain during pregnancy
+(wtgain) and baby's birthweight.
+
+Based on the information provided above, to model birthweight, we will examine 
+the predictors `blength` and `bhead`. Let's fit our proposed model below.
+```{r}
+### MODEL 1
+fit = lm(bwt ~ blength + bhead, data= birthwt_df)
+
+fit %>% 
+  broom::tidy() %>% 
+    select(term, estimate, p.value) %>% 
+       mutate(term = str_replace(term, "^blength", "Baby's length"),
+              term = str_replace(term, "^bhead", "Head circumference")) %>% 
+          knitr::kable(digits = 3)
+```
+
+Next, let's run regression diagnostics on our proposed model using the 
+`modelr` package. We also produce graphics to visually inspect residuals and
+fitted values.
+
+```{r}
+diagnostics_df = 
+birthwt_df %>% 
+  select(bwt, blength, bhead) %>% 
+  modelr::add_predictions(fit) %>% 
+  modelr::add_residuals(fit)
+
+diagnostics_df %>% 
+  ## Let's make of residuals against fitted values
+  ggplot(aes(x = pred, y = resid)) +
+    geom_point(alpha = 0.5) +
+   geom_hline(yintercept = 0) +
+  
+   ## Style format
+labs(title = 
+  "Plot showing linear of residuals against fitted values (Model 1) ") +
+   xlab("Predicted Values") +
+   ylab("Residuals")
+  
+```
+
+From the graph above, we observe that our points/errors are randomly distributed 
+across our true mean and satisfies our assumptions. However, it's worth mentioning
+that there are a few outliers in our model and we should be cautions about what 
+steps we take to address them in our final model. 
+
+
+Next, let's compare our first model to two others: <br>
+- One using length at birth and gestational age as predictors (main effects only) <br>
+- One using head circumference, length, sex, and all interactions 
+  (including the three-way interaction) between these
+
+We make this comparison by using cross validation making use of `crossv_mc` and 
+`purrr` packages. We first split our dataset into training and testing datasets.
+
+```{r}
+
+cv_df = 
+  crossv_mc(birthwt_df, 100) 
+```
+
+```{r}
+cv_df = 
+  cv_df %>% 
+  mutate(
+    ## MODEL 1
+    model1 = map(train, ~lm(bwt ~ blength + bhead, data = .x)),
+    
+    ## MODEL 2
+    model2=  map(train, ~lm(bwt ~ blength + gaweeks, data = .x))) %>% 
+  
+    ## MODEL 3
+  ##  model3=  map(train, ~lm(bwt ~ bhead + blength + babysex data = .x))) %>% 
+  mutate(
+    rmse_model1 = map2_dbl(model1, test, ~rmse(model = .x, data = .y)),
+    rmse_model2 = map2_dbl(model2, test, ~rmse(model = .x, data = .y))) 
+    ##rmse_model3 = map2_dbl(model3, test, ~rmse(model = .x, data = .y))
+```
+
+Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate
+
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+
 
 
 
