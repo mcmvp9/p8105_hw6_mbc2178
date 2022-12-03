@@ -60,7 +60,7 @@ variable by using an `if_else` statement that would apply NA to all missing valu
 New variables `city_state` and a binary variable `homicide_solved` with 0 and 1 to 
 indicate whether the homicide is solved were created. In addition, we limit our 
 analysis for those whose `victim_race` is white or black and exclude the following 
-cities Dallas,TX,Phoenix, AZ, and Kansas City, MO because these don’t report victim 
+cities Dallas,TX, Phoenix, AZ, and Kansas City, MO because they don’t report victim 
 race. Also, we omit Tulsa,AL because it is a data entry mistake.
 
 ```{r}
@@ -70,16 +70,20 @@ homicide_df =
   mutate(
     city_state = str_c(city,',',state),
     homicide_solved = if_else(disposition %in% c("Closed by arrest"), 1, 0),
-    victim_age = ifelse(victim_age > 0, as.numeric(victim_age), NA)) %>% 
+   
+   victim_age = ifelse(victim_age > 0, as.numeric(victim_age), NA)) %>% 
     
     filter(!city_state %in% c("Dallas,TX", "Phoenix, AZ", "Kansas City, MO","Tulsa,AL"),
-           victim_race %in% c("White", "Black")) 
+           victim_race %in% c("White", "Black"),
+           victim_sex %in% c("Male", "Female")) 
   
     
 ```
 
 Let's now fit a logistic regression with resolved vs unresolved as the outcome and
-victim age, sex and race as predictors for the city of Baltimore, MD. 
+victim age, sex and race as predictors for the city of Baltimore, MD. We limit 
+our variables to those entered into our model and call this new dataset
+`baltimore_df`.
 
 ```{r}
 baltimore_df = 
@@ -89,9 +93,9 @@ baltimore_df =
   arrange(desc(homicide_solved))
   
 ```
-Let's run the logistic regression in this step
+
+Let's run the logistic regression in this step:
 ```{r}
-   
 logfit_baltimore = 
   baltimore_df %>% 
   glm(homicide_solved ~ victim_age + victim_race + victim_sex, data = ., family = binomial()) 
@@ -100,7 +104,7 @@ logfit_baltimore =
 
 Let's perform manipulations to obtain adjusted odds ratio estimates with 95% CI for 
 solving homicides comparing male victims to female victims keeping all other variables fixed.
-
+We show this output in the table below. 
 
 ```{r}
 logfit_baltimore %>% 
@@ -123,14 +127,14 @@ logfit_baltimore %>%
                             (Adjusted for victim's age, race, and sex)", 
                             align = "cccc")
 
-#### USE CONFINT to check if 95% CI calculations is correct 
 ```
 
-Let's run a regression model for each of the cities in our `homicide_df` dataset
+Now, let's run a regression model for each of the cities in our `homicide_df` dataset
 and extract the adjusted odds ratio (and CI) for solving homicides comparing male 
 victims to female victims. We adjusted for victim's age, race, and sex.
 We use `purrr:map` and `nest` to create a dataframe 
 and apply the `glm` function to obtain estimated ORs and CIs for each city.
+
 
 ```{r}
 cities_reg = 
@@ -144,6 +148,8 @@ cities_reg =
      select(-data,-models) %>% 
        unnest(results) 
 ```
+
+Let's clean and tidy our output. Output presented in table below.
 
 ```{r}
 cities_fit = 
@@ -191,7 +197,7 @@ model_plot =
   
   ## Style format
 labs(title = 
-  "Adjusted Odds Ratio of unsolved homicides comparing males to females across U.S. 
+  "Adjusted OR Unsolved homicides comparing males to females across U.S. 
               Cities (Adjusted for victim's age, race, and sex)") +
   xlab("Cities") +
   ylab("Adjusted Odds Ratios") +
@@ -200,7 +206,12 @@ labs(title =
 model_plot
 
 ```
-Comment on the graph!!!!!!
+
+From the graph, we can conclude that New York,NY has the lowest odds of unsolved homicides
+comparing male victims to female victims after adjusting for victim's age, race, 
+and sex. On the other hand, Albuquerque,NM and Stockton, CA are almost tied for 
+highest odds of unsolved homicides after adjusting for the variables mentioned
+previously. 
 
 ### Problem 3 
 
@@ -296,16 +307,74 @@ steps we take to address them in our final model.
 Next, let's compare our first model to two others: <br>
 - One using length at birth and gestational age as predictors (main effects only) <br>
 - One using head circumference, length, sex, and all interactions 
-  (including the three-way interaction) between these
+  (including the three-way interaction) between these. 
+  
+However, let's first fit our models and run diagnistics procedure on these models.
+```{r}
+## MODEL2 FIT & DIAGNOSTICS PROCEDURE
 
-We make this comparison by using cross validation making use of `crossv_mc` and 
-`purrr` packages. We first split our dataset into training and testing datasets.
+fit2 = lm(bwt ~ blength + gaweeks, data = birthwt_df)
+
+
+model2_diagnostics_df = 
+birthwt_df %>% 
+  select(bwt, blength, gaweeks) %>% 
+  modelr::add_predictions(fit2) %>% 
+  modelr::add_residuals(fit2)
+
+model2_diagnostics_df %>% 
+  ## Let's make of residuals against fitted values
+  ggplot(aes(x = pred, y = resid)) +
+    geom_point(alpha = 0.5) +
+   geom_hline(yintercept = 0) +
+  
+   ## Style format
+labs(title = 
+  "Plot showing linear of residuals against fitted values (Model 2) ") +
+   xlab("Predicted Values") +
+   ylab("Residuals")
+```
 
 ```{r}
+## MODEL3 FIT & DIAGNOSTICS PROCEDURE
 
+fit3 = lm(bwt ~ bhead + blength + babysex + bhead*blength*babysex, data = birthwt_df)
+
+model3_diagnostics_df = 
+birthwt_df %>% 
+  select(bwt, bhead, blength, babysex) %>% 
+  modelr::add_predictions(fit3) %>% 
+  modelr::add_residuals(fit3)
+
+model3_diagnostics_df %>% 
+  ## Let's make of residuals against fitted values
+  ggplot(aes(x = pred, y = resid)) +
+    geom_point(alpha = 0.5) +
+   geom_hline(yintercept = 0) +
+  
+   ## Style format
+labs(title = 
+  "Plot showing linear of residuals against fitted values (Model 3) ") +
+   xlab("Predicted Values") +
+   ylab("Residuals")
+
+```
+
+From the graphs above, we observe that our points/errors are also randomly distributed 
+across our true mean and satisfies our assumptions with some outliers which could 
+be of concern.
+
+We make our comparison of all 3 models by using cross validation; making use of 
+`crossv_mc` and `purrr` packages. We first split our dataset into training and 
+testing datasets.
+
+```{r}
 cv_df = 
   crossv_mc(birthwt_df, 100) 
 ```
+
+Next, we compute root mean square errors (`rmse`) for each model. We will use this 
+value to select the best model fit.
 
 ```{r}
 cv_df = 
@@ -315,18 +384,20 @@ cv_df =
     model1 = map(train, ~lm(bwt ~ blength + bhead, data = .x)),
     
     ## MODEL 2
-    model2=  map(train, ~lm(bwt ~ blength + gaweeks, data = .x))) %>% 
+    model2=  map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
   
     ## MODEL 3
-  ##  model3=  map(train, ~lm(bwt ~ bhead + blength + babysex data = .x))) %>% 
+  model3=  map(train, ~lm(bwt ~ bhead + blength + babysex + bhead*blength*babysex, data = .x))
+  ) %>% 
+  
   mutate(
     rmse_model1 = map2_dbl(model1, test, ~rmse(model = .x, data = .y)),
-    rmse_model2 = map2_dbl(model2, test, ~rmse(model = .x, data = .y))) 
-    ##rmse_model3 = map2_dbl(model3, test, ~rmse(model = .x, data = .y))
+    rmse_model2 = map2_dbl(model2, test, ~rmse(model = .x, data = .y)), 
+    rmse_model3 = map2_dbl(model3, test, ~rmse(model = .x, data = .y)))
 ```
 
-Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate
-
+From the computation above, we now look at our results visually to determine which 
+model is the best fit given our data. 
 ```{r}
 cv_df %>% 
   select(starts_with("rmse")) %>% 
@@ -336,10 +407,19 @@ cv_df %>%
     values_to = "rmse",
     names_prefix = "rmse_") %>% 
   mutate(model = fct_inorder(model)) %>% 
-  ggplot(aes(x = model, y = rmse)) + geom_violin()
+  ggplot(aes(x = model, y = rmse)) + 
+      geom_violin() +
+  
+    ## Style format
+labs(title = 
+  "Plot showing linear of residuals against fitted values (Model 1) ") +
+   xlab("Models") +
+   ylab("Root Mean Square Errors")
 ```
 
-
+From the graph above, model1 and model3 appear to provide the best fit for our data.
+However, I will lean more towards picking model3 because it accounts for interaction
+and provides a good fit accounting for more variables in our data. 
 
 
 
